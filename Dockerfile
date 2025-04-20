@@ -1,7 +1,7 @@
 FROM curve25519xsalsa20poly1305/openvpn-socks5
 
 # Install curl for health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy our custom scripts
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
