@@ -49,29 +49,17 @@ check_vpn() {
     # timeout after 10 seconds to avoid hanging
     local ip_address=$(timeout 10 curl -s --socks5 localhost:${SOCKS5_PORT:-1080} https://api.ipify.org)
     if [ $? -eq 0 ] && [ ! -z "$ip_address" ]; then
+        # If successful, print the IP address
+        echo "------------------------------------------"
         echo "Current VPN IP: $ip_address"
+        echo "------------------------------------------"
         return 0
     else
+        echo "------------------------------------------"
         echo "Failed to get IP address through VPN"
+        echo "------------------------------------------"
         return 1
     fi
-}
-
-# Function to switch VPN configuration
-switch_vpn() {
-    local next_config=$(get_next_config "$CURRENT_CONFIG")
-    echo "Switching from $CURRENT_CONFIG to $next_config"
-    
-    # Update the active configuration
-    sed -i.bak "s/^ACTIVE_CONFIG=.*$/ACTIVE_CONFIG=$next_config/" config.env
-    CURRENT_CONFIG="$next_config"
-    
-    # Update container environment and restart
-    docker compose up -d --force-recreate vpn-socks5
-    
-    # Wait for container to initialize
-    sleep 15
-    FAILURE_COUNT=0
 }
 
 # Main health check loop
