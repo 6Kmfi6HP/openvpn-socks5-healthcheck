@@ -16,6 +16,7 @@ services:
       - config.env
     environment:
       - ACTIVE_CONFIG=${ACTIVE_CONFIG:-}
+      - VPN_COUNTRY=${VPN_COUNTRY:-JP}
       - SOCKS5_USER=${SOCKS5_USER:-user}
       - SOCKS5_PASS=${SOCKS5_PASS:-pass}
     ports:

@@ -81,9 +81,24 @@ declare -a TRIED_CONFIGS=()
 function get_config() {
     local config_dir="/vpn"
     local config_file=""
+    local country_pattern=""
     
-    # List all .ovpn files
-    local configs=($(find "${config_dir}" -name "*.ovpn" -type f))
+    # If VPN_COUNTRY is set, create pattern for filtering
+    if [ ! -z "${VPN_COUNTRY}" ]; then
+        echo "Filtering configs for country: ${VPN_COUNTRY}"
+        country_pattern="_${VPN_COUNTRY}.ovpn$"
+    fi
+    
+    # List all .ovpn files, filtered by country if specified
+    if [ ! -z "${country_pattern}" ]; then
+        local configs=($(find "${config_dir}" -name "*.ovpn" -type f | grep "${country_pattern}"))
+        if [ ${#configs[@]} -eq 0 ]; then
+            echo "Warning: No configs found for country ${VPN_COUNTRY}, falling back to all configs"
+            local configs=($(find "${config_dir}" -name "*.ovpn" -type f))
+        fi
+    else
+        local configs=($(find "${config_dir}" -name "*.ovpn" -type f))
+    fi
     
     # If no configs found, exit with error
     if [ ${#configs[@]} -eq 0 ]; then
@@ -93,8 +108,18 @@ function get_config() {
     
     # If ACTIVE_CONFIG is set and exists and hasn't been tried, use it
     if [ -n "${ACTIVE_CONFIG}" ] && [ -f "${config_dir}/${ACTIVE_CONFIG}" ] && [[ ! " ${TRIED_CONFIGS[@]} " =~ " ${config_dir}/${ACTIVE_CONFIG} " ]]; then
-        config_file="${config_dir}/${ACTIVE_CONFIG}"
-    else
+        # If country is specified, check if ACTIVE_CONFIG matches country
+        if [ ! -z "${country_pattern}" ]; then
+            if echo "${ACTIVE_CONFIG}" | grep -q "${country_pattern}"; then
+                config_file="${config_dir}/${ACTIVE_CONFIG}"
+            fi
+        else
+            config_file="${config_dir}/${ACTIVE_CONFIG}"
+        fi
+    fi
+    
+    # If no config file selected yet, choose random one
+    if [ -z "${config_file}" ]; then
         # Filter out already tried configs
         local available_configs=()
         for config in "${configs[@]}"; do
