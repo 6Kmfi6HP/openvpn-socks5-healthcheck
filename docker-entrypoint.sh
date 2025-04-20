@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# Load environment variables from config.env if it exists
+if [ -f "/config.env" ]; then
+    echo "Loading configuration from config.env..."
+    set -a
+    source /config.env
+    set +a
+fi
+
 # Function to spawn background processes
 function spawn {
     if [[ -z ${PIDS+x} ]]; then PIDS=(); fi
@@ -50,6 +58,12 @@ function get_config() {
     
     echo "${config_file}"
 }
+
+# Print current configuration
+echo "Current configuration:"
+echo "SOCKS5_USER: ${SOCKS5_USER:-user}"
+echo "SOCKS5_PORT: ${SOCKS5_PORT:-1080}"
+echo "VPN_CONFIGS_DIR: ${VPN_CONFIGS_DIR:-/vpn}"
 
 export ENTRYPOINT_PID="${BASHPID}"
 

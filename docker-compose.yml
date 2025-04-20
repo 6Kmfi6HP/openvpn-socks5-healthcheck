@@ -11,6 +11,9 @@ services:
       - /dev/net/tun
     volumes:
       - ./vpn:/vpn:ro
+      - ./config.env:/config.env:ro
+    env_file:
+      - config.env
     environment:
       - ACTIVE_CONFIG=${ACTIVE_CONFIG:-}
       - SOCKS5_USER=${SOCKS5_USER:-user}
