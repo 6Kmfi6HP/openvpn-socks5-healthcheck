@@ -19,9 +19,9 @@ services:
       - SOCKS5_USER=${SOCKS5_USER:-user}
       - SOCKS5_PASS=${SOCKS5_PASS:-pass}
     ports:
-      - "127.0.0.1:${SOCKS5_PORT:-1080}:1080"
+      - "127.0.0.1:7777:7777"
     healthcheck:
-      test: ["CMD", "curl", "-x", "socks5h://127.0.0.1:1080", "-U", "${SOCKS5_USER}:${SOCKS5_PASS}", "https://www.google.com", "-f", "-s", "-o", "/dev/null"]
+      test: ["CMD", "curl", "-x", "socks5h://127.0.0.1:7777", "-U", "${SOCKS5_USER:-user}:${SOCKS5_PASS:-pass}", "https://www.google.com", "-f", "-s", "-o", "/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3
