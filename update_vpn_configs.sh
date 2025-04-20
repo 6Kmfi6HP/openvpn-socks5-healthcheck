@@ -1,5 +1,26 @@
 #!/bin/bash
 
+# Lock file path
+LOCK_FILE="/tmp/vpn_update.lock"
+
+# Exit if another instance is running
+if [ -f "$LOCK_FILE" ]; then
+    # Check if process is actually running
+    if ps -p $(cat "$LOCK_FILE") > /dev/null 2>&1; then
+        echo "Another instance is already running"
+        exit 1
+    else
+        # Lock file exists but process is not running, remove stale lock
+        rm -f "$LOCK_FILE"
+    fi
+fi
+
+# Create lock file
+echo $$ > "$LOCK_FILE"
+
+# Ensure lock file is removed on script exit
+trap 'rm -f "$LOCK_FILE"' EXIT
+
 # Load configuration
 source ./config.env
 
@@ -93,4 +114,7 @@ chmod 644 "$VPN_CONFIGS_DIR"/*.ovpn 2>/dev/null
 echo "VPN configuration update completed"
 if [ $DOWNLOAD_COUNT -gt 0 ]; then
     echo "You may need to restart the VPN service to apply new configurations"
-fi 
+fi
+
+# Clean up lock file
+rm -f "$LOCK_FILE" 

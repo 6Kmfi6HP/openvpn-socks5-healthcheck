@@ -36,10 +36,33 @@ function on_kill {
 
 # Function to update VPN configs periodically
 function update_vpn_configs_loop {
+    local last_success_time=0
+    local min_interval=600  # Minimum 10 minutes between updates
+
     while true; do
-        echo "Updating VPN configurations..."
-        /usr/local/bin/update_vpn_configs.sh
-        sleep 600  # Sleep for 10 minutes
+        current_time=$(date +%s)
+        
+        # Only attempt update if enough time has passed since last success
+        if [ $((current_time - last_success_time)) -ge $min_interval ]; then
+            echo "Attempting VPN configurations update..."
+            if /usr/local/bin/update_vpn_configs.sh; then
+                echo "VPN configurations update completed successfully"
+                last_success_time=$current_time
+            else
+                echo "VPN configurations update failed, will retry in 1 minute"
+                sleep 60  # Wait 1 minute before retrying on failure
+                continue
+            fi
+        fi
+        
+        # Calculate time to sleep until next update
+        # This ensures we maintain the minimum interval between successful updates
+        sleep_time=$((min_interval - ($(date +%s) - last_success_time)))
+        if [ $sleep_time -gt 0 ]; then
+            sleep $sleep_time
+        else
+            sleep $min_interval
+        fi
     done
 }
 
