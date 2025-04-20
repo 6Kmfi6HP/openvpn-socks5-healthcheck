@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   vpn-socks5:
-    image: curve25519xsalsa20poly1305/openvpn-socks5
+    build: .
     container_name: ${NAME:-vpn-socks5}
     restart: unless-stopped
     cap_add:
@@ -12,7 +12,7 @@ services:
     volumes:
       - ./vpn:/vpn:ro
     environment:
-      - OPENVPN_CONFIG=/vpn/${ACTIVE_CONFIG:-vpn.ovpn}
+      - ACTIVE_CONFIG=${ACTIVE_CONFIG:-}
       - SOCKS5_USER=${SOCKS5_USER:-user}
       - SOCKS5_PASS=${SOCKS5_PASS:-pass}
     ports:
