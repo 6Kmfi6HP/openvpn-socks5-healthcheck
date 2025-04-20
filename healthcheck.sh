@@ -47,7 +47,7 @@ get_next_config() {
 check_vpn() {
     # Try to curl an external IP check service through the VPN
     # timeout after 10 seconds to avoid hanging
-    local ip_address=$(timeout 10 curl -s --socks5 localhost:${SOCKS5_PORT:-1080} https://api.ipify.org)
+    local ip_address=$(timeout 10 curl -s --socks5 localhost:${SOCKS5_PORT:-7777} -U "${SOCKS5_USER:-myuser}:${SOCKS5_PASS:-mypass}" https://api.ipify.org)
     if [ $? -eq 0 ] && [ ! -z "$ip_address" ]; then
         # If successful, print the IP address
         echo "------------------------------------------"
