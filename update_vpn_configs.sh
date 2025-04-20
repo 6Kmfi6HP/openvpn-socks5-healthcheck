@@ -5,6 +5,9 @@ LOCK_FILE="/tmp/vpn_update.lock"
 # Completion marker file
 COMPLETION_MARKER="/tmp/vpn_configs_ready"
 
+# Remove completion marker at start
+rm -f "$COMPLETION_MARKER"
+
 # Exit if another instance is running
 if [ -f "$LOCK_FILE" ]; then
     # Check if process is actually running
@@ -24,7 +27,36 @@ echo $$ > "$LOCK_FILE"
 trap 'rm -f "$LOCK_FILE"' EXIT
 
 # Load configuration
-source ./config.env
+if [ -f "/config.env" ]; then
+    source /config.env
+else
+    echo "Error: config.env not found"
+    exit 1
+fi
+
+# Verify VPN_CONFIGS_DIR is set
+if [ -z "$VPN_CONFIGS_DIR" ]; then
+    VPN_CONFIGS_DIR="/vpn"
+fi
+
+# Create vpn directory if it doesn't exist
+mkdir -p "$VPN_CONFIGS_DIR"
+
+# Function to verify OpenVPN config file
+verify_config() {
+    local config_file="$1"
+    if [ ! -f "$config_file" ]; then
+        return 1
+    fi
+    if [ ! -s "$config_file" ]; then
+        return 1
+    fi
+    # Basic OpenVPN config validation
+    if ! grep -q "^remote " "$config_file"; then
+        return 1
+    fi
+    return 0
+}
 
 # GitHub repository information
 REPO_OWNER="fdciabdul"
@@ -57,9 +89,6 @@ get_config_files() {
     grep "\.ovpn\"" | \
     sed -E 's/.*"path": "([^"]+)".*/\1/'
 }
-
-# Create vpn directory if it doesn't exist
-mkdir -p "$VPN_CONFIGS_DIR"
 
 # Get current timestamp for backup
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -96,37 +125,25 @@ done <<< "$CONFIGS"
 
 echo "Successfully downloaded $DOWNLOAD_COUNT out of $TOTAL_CONFIGS configurations"
 
-# Update ACTIVE_CONFIG if necessary
-if [ $DOWNLOAD_COUNT -gt 0 ]; then
-    # Get first config file as default
-    FIRST_CONFIG=$(ls "$VPN_CONFIGS_DIR"/*.ovpn 2>/dev/null | head -n 1)
-    if [ -n "$FIRST_CONFIG" ]; then
-        FIRST_CONFIG=$(basename "$FIRST_CONFIG")
-        # Update config.env if ACTIVE_CONFIG doesn't exist
-        if [ ! -f "$VPN_CONFIGS_DIR/$ACTIVE_CONFIG" ]; then
-            sed -i.bak "s/^ACTIVE_CONFIG=.*/ACTIVE_CONFIG=$FIRST_CONFIG/" config.env
-            echo "Updated ACTIVE_CONFIG to $FIRST_CONFIG"
-        fi
-    fi
-fi
-
-# Set permissions
-chmod 644 "$VPN_CONFIGS_DIR"/*.ovpn 2>/dev/null
-
-echo "VPN configuration update completed"
-if [ $DOWNLOAD_COUNT -gt 0 ]; then
-    echo "You may need to restart the VPN service to apply new configurations"
-    
-    # Create completion marker only if we have at least one valid config
-    if [ -n "$(find "$VPN_CONFIGS_DIR" -name "*.ovpn" -type f -size +0 2>/dev/null)" ]; then
-        touch "$COMPLETION_MARKER"
-        echo "VPN configurations are ready for use"
+# After download, verify configs
+echo "Verifying downloaded configurations..."
+VALID_CONFIGS=0
+for config in "$VPN_CONFIGS_DIR"/*.ovpn; do
+    if verify_config "$config"; then
+        VALID_CONFIGS=$((VALID_CONFIGS + 1))
     else
-        echo "Error: No valid VPN configurations found"
-        exit 1
+        echo "Removing invalid config: $config"
+        rm -f "$config"
     fi
+done
+
+if [ $VALID_CONFIGS -gt 0 ]; then
+    echo "Successfully verified $VALID_CONFIGS configurations"
+    touch "$COMPLETION_MARKER"
+    echo "VPN configurations are ready for use"
 else
-    echo "Error: Failed to download any VPN configurations"
+    echo "Error: No valid VPN configurations found"
+    rm -f "$COMPLETION_MARKER"
     exit 1
 fi
 

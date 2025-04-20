@@ -11,6 +11,11 @@ fi
 # Completion marker file
 COMPLETION_MARKER="/tmp/vpn_configs_ready"
 
+# Clean up old files on startup
+rm -f /openvpn-fifo
+rm -f "$COMPLETION_MARKER"
+rm -f /tmp/vpn_update.lock
+
 # Function to spawn background processes
 function spawn {
     if [[ -z ${PIDS+x} ]]; then PIDS=(); fi
@@ -153,11 +158,21 @@ spawn update_vpn_configs_loop
 
 # Wait for initial VPN configs to be ready
 echo "Waiting for VPN configurations to be downloaded..."
+WAIT_COUNT=0
+MAX_WAIT=60  # Maximum 5 minutes (60 * 5 seconds)
 while [ ! -f "$COMPLETION_MARKER" ]; do
-    echo "Still waiting for VPN configurations..."
+    if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+        echo "Error: Timeout waiting for VPN configurations"
+        exit 1
+    fi
+    echo "Still waiting for VPN configurations... ($(($WAIT_COUNT * 5)) seconds)"
     sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 1))
 done
 echo "VPN configurations are ready"
+
+# Reset TRIED_CONFIGS array since we have fresh configs
+TRIED_CONFIGS=()
 
 # Get and validate initial OpenVPN config
 OPENVPN_CONFIG=$(get_config)
@@ -165,6 +180,12 @@ echo "Using OpenVPN config: ${OPENVPN_CONFIG}"
 
 if [ ! -f "${OPENVPN_CONFIG}" ]; then
     echo "Error: ${OPENVPN_CONFIG} is not a valid file!"
+    exit 1
+fi
+
+# Double check file exists and is readable
+if [ ! -r "${OPENVPN_CONFIG}" ]; then
+    echo "Error: Cannot read ${OPENVPN_CONFIG}"
     exit 1
 fi
 
