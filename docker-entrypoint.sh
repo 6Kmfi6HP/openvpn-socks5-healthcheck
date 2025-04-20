@@ -85,16 +85,18 @@ function get_config() {
     
     # If VPN_COUNTRY is set, create pattern for filtering
     if [ ! -z "${VPN_COUNTRY}" ]; then
-        echo "Filtering configs for country: ${VPN_COUNTRY}"
+        echo "Filtering configs for country: ${VPN_COUNTRY}" >&2
         country_pattern="_${VPN_COUNTRY}.ovpn$"
     fi
     
     # List all .ovpn files, filtered by country if specified
     if [ ! -z "${country_pattern}" ]; then
-        local configs=($(find "${config_dir}" -name "*.ovpn" -type f | grep "${country_pattern}"))
+        local configs=($(find "${config_dir}" -name "*.ovpn" -type f | grep "${country_pattern}" || true))
         if [ ${#configs[@]} -eq 0 ]; then
-            echo "Warning: No configs found for country ${VPN_COUNTRY}, falling back to all configs"
+            echo "Warning: No configs found for country ${VPN_COUNTRY}, falling back to all configs" >&2
             local configs=($(find "${config_dir}" -name "*.ovpn" -type f))
+        else
+            echo "Found ${#configs[@]} configs for country ${VPN_COUNTRY}" >&2
         fi
     else
         local configs=($(find "${config_dir}" -name "*.ovpn" -type f))
@@ -141,6 +143,12 @@ function get_config() {
     
     # Add selected config to tried list
     TRIED_CONFIGS+=("$config_file")
+    
+    # Verify the selected config exists and is readable
+    if [ ! -f "${config_file}" ] || [ ! -r "${config_file}" ]; then
+        echo "Error: Selected config ${config_file} is not accessible" >&2
+        return 1
+    fi
     
     echo "${config_file}"
 }
@@ -201,6 +209,11 @@ TRIED_CONFIGS=()
 
 # Get and validate initial OpenVPN config
 OPENVPN_CONFIG=$(get_config)
+if [ $? -ne 0 ] || [ -z "${OPENVPN_CONFIG}" ]; then
+    echo "Error: Failed to get a valid OpenVPN config"
+    exit 1
+fi
+
 echo "Using OpenVPN config: ${OPENVPN_CONFIG}"
 
 if [ ! -f "${OPENVPN_CONFIG}" ]; then
