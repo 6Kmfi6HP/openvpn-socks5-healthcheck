@@ -10,7 +10,7 @@ services:
     devices:
       - /dev/net/tun
     volumes:
-      - ./vpn:/vpn:ro
+      - ./vpn:/vpn
       - ./config.env:/config.env:ro
     env_file:
       - config.env
