@@ -34,6 +34,15 @@ function on_kill {
     kill "${ENTRYPOINT_PID}" 2> /dev/null
 }
 
+# Function to update VPN configs periodically
+function update_vpn_configs_loop {
+    while true; do
+        echo "Updating VPN configurations..."
+        /usr/local/bin/update_vpn_configs.sh
+        sleep 600  # Sleep for 10 minutes
+    done
+}
+
 # Global array to store tried configs
 declare -a TRIED_CONFIGS=()
 
@@ -148,6 +157,9 @@ cd "${SAVED_DIR}"
 
 # Start health check script
 spawn /usr/local/bin/healthcheck.sh
+
+# Start VPN config update loop
+spawn update_vpn_configs_loop
 
 cat /openvpn-fifo > /dev/null
 rm -f /openvpn-fifo
