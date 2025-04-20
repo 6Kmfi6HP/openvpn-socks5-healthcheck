@@ -43,12 +43,18 @@ get_next_config() {
     echo "$next_config"
 }
 
-# Function to check if VPN is working by testing connectivity
+# Function to check if VPN is working and get current IP
 check_vpn() {
     # Try to curl an external IP check service through the VPN
     # timeout after 10 seconds to avoid hanging
-    timeout 10 curl -s --socks5 localhost:${SOCKS5_PORT:-1080} https://api.ipify.org > /dev/null
-    return $?
+    local ip_address=$(timeout 10 curl -s --socks5 localhost:${SOCKS5_PORT:-1080} https://api.ipify.org)
+    if [ $? -eq 0 ] && [ ! -z "$ip_address" ]; then
+        echo "Current VPN IP: $ip_address"
+        return 0
+    else
+        echo "Failed to get IP address through VPN"
+        return 1
+    fi
 }
 
 # Function to switch VPN configuration
@@ -68,7 +74,7 @@ switch_vpn() {
     FAILURE_COUNT=0
 }
 
-# Main loop
+# Main health check loop
 echo "Starting VPN health check monitoring..."
 echo "Initial configuration: $CURRENT_CONFIG"
 
