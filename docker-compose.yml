@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  vpn-socks5:
+    image: curve25519xsalsa20poly1305/openvpn-socks5
+    container_name: ${NAME:-vpn-socks5}
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    volumes:
+      - ./vpn:/vpn:ro
+    environment:
+      - OPENVPN_CONFIG=/vpn/${ACTIVE_CONFIG:-vpn.ovpn}
+      - SOCKS5_USER=${SOCKS5_USER:-user}
+      - SOCKS5_PASS=${SOCKS5_PASS:-pass}
+    ports:
+      - "${SOCKS5_PORT:-1080}:1080"
+    healthcheck:
+      test: ["CMD", "curl", "-x", "socks5h://127.0.0.1:1080", "-U", "${SOCKS5_USER}:${SOCKS5_PASS}", "https://www.google.com", "-f", "-s", "-o", "/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "autoheal=true"
+
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: autoheal
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock 
