@@ -2,6 +2,8 @@
 
 # Lock file path
 LOCK_FILE="/tmp/vpn_update.lock"
+# Completion marker file
+COMPLETION_MARKER="/tmp/vpn_configs_ready"
 
 # Exit if another instance is running
 if [ -f "$LOCK_FILE" ]; then
@@ -114,6 +116,18 @@ chmod 644 "$VPN_CONFIGS_DIR"/*.ovpn 2>/dev/null
 echo "VPN configuration update completed"
 if [ $DOWNLOAD_COUNT -gt 0 ]; then
     echo "You may need to restart the VPN service to apply new configurations"
+    
+    # Create completion marker only if we have at least one valid config
+    if [ -n "$(find "$VPN_CONFIGS_DIR" -name "*.ovpn" -type f -size +0 2>/dev/null)" ]; then
+        touch "$COMPLETION_MARKER"
+        echo "VPN configurations are ready for use"
+    else
+        echo "Error: No valid VPN configurations found"
+        exit 1
+    fi
+else
+    echo "Error: Failed to download any VPN configurations"
+    exit 1
 fi
 
 # Clean up lock file

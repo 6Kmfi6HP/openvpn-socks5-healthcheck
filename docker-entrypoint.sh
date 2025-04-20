@@ -8,6 +8,9 @@ if [ -f "/config.env" ]; then
     set +a
 fi
 
+# Completion marker file
+COMPLETION_MARKER="/tmp/vpn_configs_ready"
+
 # Function to spawn background processes
 function spawn {
     if [[ -z ${PIDS+x} ]]; then PIDS=(); fi
@@ -145,6 +148,17 @@ export ENTRYPOINT_PID="${BASHPID}"
 trap "on_kill" EXIT
 trap "on_kill" SIGINT
 
+# Start VPN config update loop in background first
+spawn update_vpn_configs_loop
+
+# Wait for initial VPN configs to be ready
+echo "Waiting for VPN configurations to be downloaded..."
+while [ ! -f "$COMPLETION_MARKER" ]; do
+    echo "Still waiting for VPN configurations..."
+    sleep 5
+done
+echo "VPN configurations are ready"
+
 # Get and validate initial OpenVPN config
 OPENVPN_CONFIG=$(get_config)
 echo "Using OpenVPN config: ${OPENVPN_CONFIG}"
@@ -180,9 +194,6 @@ cd "${SAVED_DIR}"
 
 # Start health check script
 spawn /usr/local/bin/healthcheck.sh
-
-# Start VPN config update loop
-spawn update_vpn_configs_loop
 
 cat /openvpn-fifo > /dev/null
 rm -f /openvpn-fifo
