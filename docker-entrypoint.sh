@@ -34,29 +34,78 @@ function on_kill {
     kill "${ENTRYPOINT_PID}" 2> /dev/null
 }
 
+# Global array to store tried configs
+declare -a TRIED_CONFIGS=()
+
 # Function to get random config file
-function get_random_config() {
+function get_config() {
     local config_dir="/vpn"
+    local config_file=""
+    
+    # List all .ovpn files
     local configs=($(find "${config_dir}" -name "*.ovpn" -type f))
     
+    # If no configs found, exit with error
     if [ ${#configs[@]} -eq 0 ]; then
         echo "Error: No OpenVPN config files found in ${config_dir}" >&2
         exit 1
     fi
     
-    # Get random index
-    local random_index=$((RANDOM % ${#configs[@]}))
-    echo "${configs[$random_index]}"
+    # If ACTIVE_CONFIG is set and exists and hasn't been tried, use it
+    if [ -n "${ACTIVE_CONFIG}" ] && [ -f "${config_dir}/${ACTIVE_CONFIG}" ] && [[ ! " ${TRIED_CONFIGS[@]} " =~ " ${config_dir}/${ACTIVE_CONFIG} " ]]; then
+        config_file="${config_dir}/${ACTIVE_CONFIG}"
+    else
+        # Filter out already tried configs
+        local available_configs=()
+        for config in "${configs[@]}"; do
+            if [[ ! " ${TRIED_CONFIGS[@]} " =~ " ${config} " ]]; then
+                available_configs+=("$config")
+            fi
+        done
+        
+        # If all configs have been tried, reset the tried list
+        if [ ${#available_configs[@]} -eq 0 ]; then
+            TRIED_CONFIGS=()
+            available_configs=("${configs[@]}")
+        fi
+        
+        # Get random config from available ones
+        local random_index=$((RANDOM % ${#available_configs[@]}))
+        config_file="${available_configs[$random_index]}"
+    fi
+    
+    # Add selected config to tried list
+    TRIED_CONFIGS+=("$config_file")
+    
+    echo "${config_file}"
 }
+
+# Function to switch VPN config
+function switch_vpn() {
+    echo "Switching VPN configuration..."
+    kill $(pidof openvpn) 2>/dev/null
+    
+    # Get new config
+    OPENVPN_CONFIG=$(get_config)
+    echo "Switching to OpenVPN config: ${OPENVPN_CONFIG}"
+    
+    # Start OpenVPN with new config
+    cd $(dirname "${OPENVPN_CONFIG}")
+    spawn openvpn \
+        --script-security 2 \
+        --config "${OPENVPN_CONFIG}" \
+        --up /usr/local/bin/openvpn-up.sh
+    cd "${SAVED_DIR}"
+}
+
+# Handle SIGUSR1 signal for VPN switching
+trap "switch_vpn" SIGUSR1
 
 # Print current configuration
 echo "Current configuration:"
 echo "SOCKS5_USER: ${SOCKS5_USER:-user}"
 echo "SOCKS5_PORT: ${SOCKS5_PORT:-1080}"
 echo "VPN_CONFIGS_DIR: ${VPN_CONFIGS_DIR:-/vpn}"
-echo "VPN_SWITCH_MODE: ${VPN_SWITCH_MODE:-health}"
-echo "VPN_SWITCH_INTERVAL: ${VPN_SWITCH_INTERVAL:-3600}"
-echo "HEALTH_CHECK_INTERVAL: ${HEALTH_CHECK_INTERVAL:-60}"
 
 export ENTRYPOINT_PID="${BASHPID}"
 
@@ -64,22 +113,19 @@ export ENTRYPOINT_PID="${BASHPID}"
 trap "on_kill" EXIT
 trap "on_kill" SIGINT
 
-# Get initial OpenVPN config
-if [ -n "${ACTIVE_CONFIG}" ] && [ -f "/vpn/${ACTIVE_CONFIG}" ]; then
-    OPENVPN_CONFIG="/vpn/${ACTIVE_CONFIG}"
-else
-    OPENVPN_CONFIG=$(get_random_config)
+# Get and validate initial OpenVPN config
+OPENVPN_CONFIG=$(get_config)
+echo "Using OpenVPN config: ${OPENVPN_CONFIG}"
+
+if [ ! -f "${OPENVPN_CONFIG}" ]; then
+    echo "Error: ${OPENVPN_CONFIG} is not a valid file!"
+    exit 1
 fi
 
-echo "Using initial OpenVPN config: ${OPENVPN_CONFIG}"
+export OPENVPN_CONFIG=$(readlink -f "${OPENVPN_CONFIG}")
 
-# Copy health check script to root
-cp /healthcheck.sh /healthcheck.sh
-chmod +x /healthcheck.sh
-
-# Copy VPN switcher script to root
-cp /vpn_switcher.sh /vpn_switcher.sh
-chmod +x /vpn_switcher.sh
+# Create FIFO for OpenVPN communication
+mkfifo /openvpn-fifo
 
 # Set up routing
 SUBNET=$(ip -o -f inet addr show dev eth0 | awk '{print $4}')
@@ -91,9 +137,6 @@ ip rule add from "${IPADDR}" table 128
 ip route add table 128 to "${NETWORK}/${PREFIX}" dev eth0
 ip route add table 128 default via "${GATEWAY}"
 
-# Start VPN switcher in background
-spawn /vpn_switcher.sh
-
 # Start OpenVPN
 SAVED_DIR="${PWD}"
 cd $(dirname "${OPENVPN_CONFIG}")
@@ -101,8 +144,13 @@ spawn openvpn \
     --script-security 2 \
     --config "${OPENVPN_CONFIG}" \
     --up /usr/local/bin/openvpn-up.sh
-export OPENVPN_PID=$!
 cd "${SAVED_DIR}"
+
+# Start health check script
+spawn /usr/local/bin/healthcheck.sh
+
+cat /openvpn-fifo > /dev/null
+rm -f /openvpn-fifo
 
 # Handle additional commands
 if [[ -n "${OPENVPN_UP}" ]]; then
@@ -111,5 +159,7 @@ elif [[ $# -gt 0 ]]; then
     "$@"
 fi
 
-# Keep container running
-join 
+# Keep container running if no additional commands or DAEMON_MODE is true
+if [[ $# -eq 0 || "${DAEMON_MODE}" == true ]]; then
+    join
+fi 
