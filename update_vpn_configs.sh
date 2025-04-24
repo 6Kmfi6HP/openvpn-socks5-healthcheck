@@ -39,6 +39,13 @@ if [ -z "$VPN_CONFIGS_DIR" ]; then
     VPN_CONFIGS_DIR="/vpn"
 fi
 
+# Set default country if not specified
+if [ -z "$VPN_COUNTRY" ]; then
+    VPN_COUNTRY="JP"
+fi
+
+echo "Downloading VPN configs for country: $VPN_COUNTRY"
+
 # Create vpn directory if it doesn't exist
 mkdir -p "$VPN_CONFIGS_DIR"
 
@@ -82,11 +89,12 @@ download_config() {
     fi
 }
 
-# Function to get list of config files from GitHub API
+# Function to get list of config files from GitHub API for specific country
 get_config_files() {
     curl -s "$API_BASE/repos/$REPO_OWNER/$REPO_NAME/contents/$CONFIGS_PATH?ref=$BRANCH" | \
     grep "\"path\"" | \
     grep "\.ovpn\"" | \
+    grep "_${VPN_COUNTRY}\.ovpn\"" | \
     sed -E 's/.*"path": "([^"]+)".*/\1/'
 }
 
@@ -106,12 +114,18 @@ fi
 rm -f "$VPN_CONFIGS_DIR"/*.ovpn
 
 # Download new configs
-echo "Fetching VPN configurations from VPNGate repository..."
+echo "Fetching VPN configurations for $VPN_COUNTRY from VPNGate repository..."
 CONFIGS=$(get_config_files)
 DOWNLOAD_COUNT=0
 TOTAL_CONFIGS=$(echo "$CONFIGS" | wc -l)
 
-echo "Found $TOTAL_CONFIGS configuration files"
+if [ "$TOTAL_CONFIGS" -eq 0 ]; then
+    echo "No configurations found for country $VPN_COUNTRY"
+    echo "Please check if the country code is correct. Example country codes: JP, US, KR, etc."
+    exit 1
+fi
+
+echo "Found $TOTAL_CONFIGS configuration files for $VPN_COUNTRY"
 
 while IFS= read -r config_path; do
     if [ -n "$config_path" ]; then
@@ -123,7 +137,7 @@ while IFS= read -r config_path; do
     fi
 done <<< "$CONFIGS"
 
-echo "Successfully downloaded $DOWNLOAD_COUNT out of $TOTAL_CONFIGS configurations"
+echo "Successfully downloaded $DOWNLOAD_COUNT out of $TOTAL_CONFIGS configurations for $VPN_COUNTRY"
 
 # After download, verify configs
 echo "Verifying downloaded configurations..."
@@ -138,11 +152,11 @@ for config in "$VPN_CONFIGS_DIR"/*.ovpn; do
 done
 
 if [ $VALID_CONFIGS -gt 0 ]; then
-    echo "Successfully verified $VALID_CONFIGS configurations"
+    echo "Successfully verified $VALID_CONFIGS configurations for $VPN_COUNTRY"
     touch "$COMPLETION_MARKER"
     echo "VPN configurations are ready for use"
 else
-    echo "Error: No valid VPN configurations found"
+    echo "Error: No valid VPN configurations found for $VPN_COUNTRY"
     rm -f "$COMPLETION_MARKER"
     exit 1
 fi
